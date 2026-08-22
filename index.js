@@ -33,10 +33,18 @@ setInterval(() => {
       if (room.timer === 0) {
         room.status = 'ENDED';
 
-        // Deliver item to highest bidder vault & deduct bid from balance
+        // Deliver item to highest bidder vault & transfer funds
         if (room.highestBidder !== 'Reserve Price' && usersDB[room.highestBidder]) {
+          // Add item to winner's vault
           usersDB[room.highestBidder].vault.push(room.activeItem);
+          
+          // Deduct bid from winner balance
           usersDB[room.highestBidder].credits -= room.currentBid;
+
+          // 💰 PAY THE OWNER: Transfer final bid credits to the seller
+          if (room.ownerUsername && usersDB[room.ownerUsername]) {
+            usersDB[room.ownerUsername].credits += room.currentBid;
+          }
         }
 
         io.to(`arena_${arenaId}`).emit('auction_ended', {
