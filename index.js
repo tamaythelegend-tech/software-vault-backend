@@ -11,7 +11,7 @@ const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
-// Database Stores
+// Persistent User Database Store in Server Memory
 const usersDB = {}; // { username: { password, credits, vault: [] } }
 
 const arenaRooms = {
@@ -25,27 +25,32 @@ const arenaRooms = {
   8: { activeItem: null, ownerUsername: null, participants: [], currentBid: 0, highestBidder: 'None', timer: 0, status: 'EMPTY' },
 };
 
+// Main Server Game Loop
 setInterval(() => {
   Object.keys(arenaRooms).forEach(arenaId => {
     const room = arenaRooms[arenaId];
     if (room.status === 'LIVE' && room.timer > 0) {
       room.timer -= 1;
+      
       if (room.timer === 0) {
         room.status = 'ENDED';
 
-        // Deliver item to highest bidder vault & transfer funds
+        // Process final payment and item transfer
         if (room.highestBidder !== 'Reserve Price' && usersDB[room.highestBidder]) {
-          // Add item to winner's vault
+          // 1. Give item to buyer's vault
           usersDB[room.highestBidder].vault.push(room.activeItem);
           
-          // Deduct bid from winner balance
+          // 2. Deduct final bid from buyer balance
           usersDB[room.highestBidder].credits -= room.currentBid;
 
-          // 💰 PAY THE OWNER: Transfer final bid credits to the seller
+          // 3. 💰 PAY THE OWNER: Transfer credits to item creator
           if (room.ownerUsername && usersDB[room.ownerUsername]) {
             usersDB[room.ownerUsername].credits += room.currentBid;
           }
         }
+
+        // Notify all connected clients to instantly refresh their balances
+        io.emit('balance_update_needed');
 
         io.to(`arena_${arenaId}`).emit('auction_ended', {
           winner: room.highestBidder,
@@ -131,6 +136,7 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(5000, '0.0.0.0', () => {
-  console.log('[VAULT ENGINE] Real-Time Global Server Active on Port 5000');
-}); 
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`[VAULT ENGINE] Server Active on Port ${PORT}`);
+});
